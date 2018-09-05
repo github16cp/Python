@@ -380,7 +380,135 @@ users = User.findAll()
 print(user['id'])
 print(user.id)
 ```
+关于此节的一些参考 - [廖雪峰讨论](https://www.liaoxuefeng.com/discuss/001409195742008d822b26cf3de46aea14f2b7378a1ba91000/0014343464019826e946ddb3cc9498c969d47deca592311000?)
+## Day4 - 编写Model
+-------
+有了ORM，我们就可以把Web App需要的3个表用`Model`表示出来：
+```Python
+import time, uuid
 
+from orm import Model, StringField, BooleanField, FloatField, TextField
+
+def next_id():
+    return '%015d%s000' % (int(time.time() * 1000), uuid.uuid4().hex)
+
+class User(Model):
+    __table__ = 'users'
+
+    id = StringField(primary_key=True, default=next_id, ddl='varchar(50)')
+    email = StringField(ddl='varchar(50)')
+    passwd = StringField(ddl='varchar(50)')
+    admin = BooleanField()
+    name = StringField(ddl='varchar(50)')
+    image = StringField(ddl='varchar(500)')
+    created_at = FloatField(default=time.time)
+
+class Blog(Model):
+    __table__ = 'blogs'
+
+    id = StringField(primary_key=True, default=next_id, ddl='varchar(50)')
+    user_id = StringField(ddl='varchar(50)')
+    user_name = StringField(ddl='varchar(50)')
+    user_image = StringField(ddl='varchar(500)')
+    name = StringField(ddl='varchar(50)')
+    summary = StringField(ddl='varchar(200)')
+    content = TextField()
+    created_at = FloatField(default=time.time)
+
+class Comment(Model):
+    __table__ = 'comments'
+
+    id = StringField(primary_key=True, default=next_id, ddl='varchar(50)')
+    blog_id = StringField(ddl='varchar(50)')
+    user_id = StringField(ddl='varchar(50)')
+    user_name = StringField(ddl='varchar(50)')
+    user_image = StringField(ddl='varchar(500)')
+    content = TextField()
+    created_at = FloatField(default=time.time)
+```
+在编写ORM时，给一个Field增加一个`default`参数可以让ORM自己填入缺省值，非常方便。并且，缺省值可以作为函数对象传入，在调用`save()`时自动计算。
+
+例如，主键`id`的缺省值是函数`next_id`，创建时间`created_at`的缺省值是函数`time.time`，可以自动设置当前日期和时间。
+
+日期和时间用`float`类型存储在数据库中，而不是`datetime`类型，这么做的好处是不必关心数据库的时区以及时区转换问题，排序非常简单，显示的时候，只需要做一个`float`到`str`的转换，也非常容易。
+
+### 初始化数据库表
+如果表的数量很少，可以手写创建表的SQL脚本：
+```Python
+-- schema.sql
+
+drop database if exists awesome;
+
+create database awesome;
+
+use awesome;
+
+grant select, insert, update, delete on awesome.* to 'www-data'@'localhost' identified by 'www-data';
+
+create table users (
+    `id` varchar(50) not null,
+    `email` varchar(50) not null,
+    `passwd` varchar(50) not null,
+    `admin` bool not null,
+    `name` varchar(50) not null,
+    `image` varchar(500) not null,
+    `created_at` real not null,
+    unique key `idx_email` (`email`),
+    key `idx_created_at` (`created_at`),
+    primary key (`id`)
+) engine=innodb default charset=utf8;
+
+create table blogs (
+    `id` varchar(50) not null,
+    `user_id` varchar(50) not null,
+    `user_name` varchar(50) not null,
+    `user_image` varchar(500) not null,
+    `name` varchar(50) not null,
+    `summary` varchar(200) not null,
+    `content` mediumtext not null,
+    `created_at` real not null,
+    key `idx_created_at` (`created_at`),
+    primary key (`id`)
+) engine=innodb default charset=utf8;
+
+create table comments (
+    `id` varchar(50) not null,
+    `blog_id` varchar(50) not null,
+    `user_id` varchar(50) not null,
+    `user_name` varchar(50) not null,
+    `user_image` varchar(500) not null,
+    `content` mediumtext not null,
+    `created_at` real not null,
+    key `idx_created_at` (`created_at`),
+    primary key (`id`)
+) engine=innodb default charset=utf8;
+```
+如果表的数量很多，可以从`Model`对象直接通过脚本自动生成SQL脚本，使用更简单。
+
+把SQL脚本放到MySQL命令行里执行：
+```Python
+$ mysql -u root -p < schema.sql
+```
+我们就完成了数据库表的初始化。
+### 编写数据访问代码
+接下来，就可以真正开始编写代码操作对象了。比如，对于`User`对象，我们就可以做如下操作：
+```Python
+import orm
+from models import User, Blog, Comment
+
+def test():
+    yield from orm.create_pool(user='www-data', password='www-data', database='awesome')
+
+    u = User(name='Test', email='test@example.com', passwd='1234567890', image='about:blank')
+
+    yield from u.save()
+
+for x in test():
+    pass
+```
+可以在MySQL客户端命令行查询，看看数据是不是正常存储到MySQL里面了。
+
+本节源代码 [models.py](https://github.com/github16cp/Python/blob/master/awesome_py3_webapp/www/models.py)
 测试`models.py`
 ```Python
 import orm,asyncio
@@ -487,4 +615,275 @@ mysql> select * from users;
 | 001536116740855bb86d5880afa49658311e32410b27666000 | test4@test.com   | test       |     0 | test3 | about:blank | 1536116740.85486 |
 +----------------------------------------------------+------------------+------------+-------+-------+-------------+------------------+
 2 rows in set (0.00 sec)
+```
+## Day 5 - 编写Web框架
+------
+在正式开始Web开发前，我们需要编写一个Web框架。
+
+`aiohttp`已经是一个Web框架了，为什么我们还需要自己封装一个？
+
+原因是从使用者的角度来说，`aiohttp`相对比较底层，编写一个URL的处理函数需要这么几步：
+
+第一步，编写一个用`@asyncio.coroutine`装饰的函数：
+```Python
+@asyncio.coroutine
+def handle_url_xxx(request):
+    pass
+```
+第二步，传入的参数需要自己从`request`中获取：
+```Python
+url_param = request.match_info['key']
+query_params = parse_qs(request.query_string)
+```
+最后，需要自己构造`Response`对象：
+```Python
+text = render('template', data)
+return web.Response(text.encode('utf-8'))
+```
+这些重复的工作可以由框架完成。例如，处理带参数的URL`/blog/{id}`可以这么写：
+```Python
+@get('/blog/{id}')
+def get_blog(id):
+    pass
+```
+处理query_string参数可以通过关键字参数**kw或者命名关键字参数接收：
+```Python
+@get('/api/comments')
+def api_comments(*, page='1'):
+    pass
+```
+对于函数的返回值，不一定是`web.Response`对象，可以是`str`、`bytes`或`dict`。
+
+如果希望渲染模板，我们可以这么返回一个`dict`：
+```Python
+return {
+    '__template__': 'index.html',
+    'data': '...'
+}
+```
+因此，Web框架的设计是完全从使用者出发，目的是让使用者编写尽可能少的代码。
+
+编写简单的函数而非引入`request`和`web.Response`还有一个额外的好处，就是可以单独测试，否则，需要模拟一个`request`才能测试。
+
+### @get和@post
+要把一个函数映射为一个URL处理函数，我们先定义`@get()`：
+```Python
+def get(path):
+    '''
+    Define decorator @get('/path')
+    '''
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kw):
+            return func(*args, **kw)
+        wrapper.__method__ = 'GET'
+        wrapper.__route__ = path
+        return wrapper
+    return decorator
+```
+这样，一个函数通过`@get()`的装饰就附带了URL信息。
+
+`@post`与`@get`定义类似。
+###　定义RequestHandler
+URL处理函数不一定是一个`coroutine`，因此我们用`RequestHandler()`来封装一个URL处理函数。
+
+`RequestHandler`是一个类，由于定义了`__call__()`方法，因此可以将其实例视为函数。
+
+`RequestHandler`目的就是从URL函数中分析其需要接收的参数，从`request`中获取必要的参数，调用URL函数，然后把结果转换为`web.Response`对象，这样，就完全符合`aiohttp`框架的要求：
+```Python
+class RequestHandler(object):
+
+    def __init__(self, app, fn):
+        self._app = app
+        self._func = fn
+        ...
+
+    @asyncio.coroutine
+    def __call__(self, request):
+        kw = ... 获取参数
+        r = yield from self._func(**kw)
+        return r
+```
+再编写一个`add_route`函数，用来注册一个URL处理函数：
+```Python
+def add_route(app, fn):
+    method = getattr(fn, '__method__', None)
+    path = getattr(fn, '__route__', None)
+    if path is None or method is None:
+        raise ValueError('@get or @post not defined in %s.' % str(fn))
+    if not asyncio.iscoroutinefunction(fn) and not inspect.isgeneratorfunction(fn):
+        fn = asyncio.coroutine(fn)
+    logging.info('add route %s %s => %s(%s)' % (method, path, fn.__name__, ', '.join(inspect.signature(fn).parameters.keys())))
+    app.router.add_route(method, path, RequestHandler(app, fn))
+```
+最后一步，把很多次`add_route()`注册的调用：
+```Python
+add_route(app, handles.index)
+add_route(app, handles.blog)
+add_route(app, handles.create_comment)
+...
+```
+变成自动扫描：
+```Python
+# 自动把handler模块的所有符合条件的函数注册了:
+add_routes(app, 'handlers')
+```
+add_routes()定义如下：
+```Python
+def add_routes(app, module_name):
+    n = module_name.rfind('.')
+    if n == (-1):
+        mod = __import__(module_name, globals(), locals())
+    else:
+        name = module_name[n+1:]
+        mod = getattr(__import__(module_name[:n], globals(), locals(), [name]), name)
+    for attr in dir(mod):
+        if attr.startswith('_'):
+            continue
+        fn = getattr(mod, attr)
+        if callable(fn):
+            method = getattr(fn, '__method__', None)
+            path = getattr(fn, '__route__', None)
+            if method and path:
+                add_route(app, fn)
+```
+最后，在`app.py`中加入`middleware`、`jinja2`模板和自注册的支持：
+```Python
+app = web.Application(loop=loop, middlewares=[
+    logger_factory, response_factory
+])
+init_jinja2(app, filters=dict(datetime=datetime_filter))
+add_routes(app, 'handlers')
+add_static(app)
+```
+### middleware
+`middleware`是一种拦截器，一个URL在被某个函数处理前，可以经过一系列的`middleware`的处理。
+
+一个`middleware`可以改变URL的输入、输出，甚至可以决定不继续处理而直接返回。middleware的用处就在于把通用的功能从每个URL处理函数中拿出来，集中放到一个地方。例如，一个记录URL日志的`logger`可以简单定义如下：
+```Python
+@asyncio.coroutine
+def logger_factory(app, handler):
+    @asyncio.coroutine
+    def logger(request):
+        # 记录日志:
+        logging.info('Request: %s %s' % (request.method, request.path))
+        # 继续处理请求:
+        return (yield from handler(request))
+    return logger
+```
+而`response`这个`middleware`把返回值转换为`web.Response`对象再返回，以保证满足`aiohttp`的要求：
+```Python
+@asyncio.coroutine
+def response_factory(app, handler):
+    @asyncio.coroutine
+    def response(request):
+        # 结果:
+        r = yield from handler(request)
+        if isinstance(r, web.StreamResponse):
+            return r
+        if isinstance(r, bytes):
+            resp = web.Response(body=r)
+            resp.content_type = 'application/octet-stream'
+            return resp
+        if isinstance(r, str):
+            resp = web.Response(body=r.encode('utf-8'))
+            resp.content_type = 'text/html;charset=utf-8'
+            return resp
+        if isinstance(r, dict):
+            ...
+```
+有了这些基础设施，我们就可以专注地往`handlers`模块不断添加URL处理函数了，可以极大地提高开发效率。
+
+## Day 6 - 编写配置文件
+-------
+有了Web框架和ORM框架，我们就可以开始装配App了。
+
+通常，一个Web App在运行时都需要读取配置文件，比如数据库的用户名、口令等，在不同的环境中运行时，Web App可以通过读取不同的配置文件来获得正确的配置。
+
+由于Python本身语法简单，完全可以直接用Python源代码来实现配置，而不需要再解析一个单独的`.properties`或者`.yaml`等配置文件。
+
+默认的配置文件应该完全符合本地开发环境，这样，无需任何设置，就可以立刻启动服务器。
+
+我们把默认的配置文件命名为`config_default.py`：
+```Python
+# config_default.py
+
+configs = {
+    'db': {
+        'host': '127.0.0.1',
+        'port': 3306,
+        'user': 'www-data',
+        'password': 'www-data',
+        'database': 'awesome'
+    },
+    'session': {
+        'secret': 'AwEsOmE'
+    }
+}
+```
+上述配置文件简单明了。但是，如果要部署到服务器时，通常需要修改数据库的host等信息，直接修改`config_default.py`不是一个好办法，更好的方法是编写一个`config_override.py`，用来覆盖某些默认设置：
+```Python
+# config_override.py
+
+configs = {
+    'db': {
+        'host': '192.168.0.100'
+    }
+}
+```
+把`config_default.py`作为开发环境的标准配置，把`config_override.py`作为生产环境的标准配置，我们就可以既方便地在本地开发，又可以随时把应用部署到服务器上。
+
+应用程序读取配置文件需要优先从`config_override.py`读取。为了简化读取配置文件，可以把所有配置读取到统一的`config.py`中：
+```Python
+# config.py
+configs = config_default.configs
+
+try:
+    import config_override
+    configs = merge(configs, config_override.configs)
+except ImportError:
+    pass
+```
+App的配置完成。
+
+## Day 7 - 编写MVC
+现在，ORM框架、Web框架和配置都已就绪，我们可以开始编写一个最简单的MVC，把它们全部启动起来。
+
+通过Web框架的`@get`和ORM框架的Model支持，可以很容易地编写一个处理首页URL的函数：
+```Python
+@get('/')
+def index(request):
+    users = yield from User.findAll()
+    return {
+        '__template__': 'test.html',
+        'users': users
+    }
+```
+`'__template__'`指定的模板文件是`test.html`，其他参数是传递给模板的数据，所以我们在模板的根目录`templates`下创建`test.html`：
+```Python
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Test users - Awesome Python Webapp</title>
+</head>
+<body>
+    <h1>All users</h1>
+    {% for u in users %}
+    <p>{{ u.name }} / {{ u.email }}</p>
+    {% endfor %}
+</body>
+</html>
+```
+接下来，如果一切顺利，可以用命令行启动Web服务器：
+```Python
+$ python3 app.py
+```
+然后，在浏览器中访问`http://localhost:9000/`。
+
+如果数据库的`users`表什么内容也没有，你就无法在浏览器中看到循环输出的内容。可以自己在MySQL的命令行里给`users`表添加几条记录，然后再访问：
+
+`注意`：这儿出现了错误OSError: [Errno 10048] error while attempting to bind on address ('127.0.0.1', 9000):解决方案，关闭编辑器，重新编译调试，原因：端口被占用。
+```Python
+
 ```
