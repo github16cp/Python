@@ -1,40 +1,18 @@
-# 导入:
-from sqlalchemy import Column, String, create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+import os,sys
 
-# 创建对象的基类:
-Base = declarative_base()
+def f(n,x):
+#n为待转换的十进制数，x为机制，取值为2-16
+    a=[0,1,2,3,4,5,6,7,8,9,'A','b','C','D','E','F']
+    b=[]
+    while True:
+        s=n//x#商
+        y=n%x#余数
+        b=b+[y]
+        if s==0:
+            break
+        n=s
+    b.reverse()
+    for i in b:
+        print(a[i],end='')
 
-# 定义User对象:
-class User(Base):
-    # 表的名字:
-    __tablename__ = 'user'
-
-    # 表的结构:
-    id = Column(String(20), primary_key=True)
-    name = Column(String(20))
-
-# 初始化数据库连接:
-engine = create_engine('mysql+mysqlconnector://root:@localhost:3306/test')
-# 创建DBSession类型:
-DBSession = sessionmaker(bind=engine)
-# 创建session对象:
-session = DBSession()
-# 创建新User对象:
-new_user = User(id='5', name='Bob')
-# 添加到session:
-session.add(new_user)
-# 提交即保存到数据库:
-session.commit()
-# 关闭session:
-session.close()
-# 创建Session:
-session = DBSession()
-# 创建Query查询，filter是where条件，最后调用one()返回唯一行，如果调用all()则返回所有行:
-user = session.query(User).filter(User.id=='5').one()
-# 打印类型和对象的name属性:
-print('type:', type(user))
-print('name:', user.name)
-# 关闭Session:
-session.close()
+f(45394819096256031,2)
