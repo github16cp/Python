@@ -16,7 +16,7 @@ from coroweb import add_routes, add_static
 
 from coroweb import get, post
 
-from models import User
+from models import User,Blog
 
 def init_jinja2(app, **kw):
     logging.info('init jinja2...')
@@ -111,6 +111,7 @@ def datetime_filter(t):
 
 #def index(request):
 #    return web.Response(body=b'<h1>Awesome</h1>', content_type='text/html')
+'''
 @get('/')
 def index(request):
     users = yield from User.findAll()
@@ -118,6 +119,8 @@ def index(request):
         '__template__': 'test.html',
         'users': users
     }
+'''
+
 '''
 async def init(loop):
     app = web.Application(loop=loop)
