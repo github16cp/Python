@@ -18,6 +18,8 @@ from coroweb import add_routes, add_static
 
 from coroweb import get, post
 
+from handlers import cookie2user, COOKIE_NAME
+
 from models import User,Blog
 
 def init_jinja2(app, **kw):
@@ -47,6 +49,22 @@ async def logger_factory(app, handler):
         # await asyncio.sleep(0.3)
         return (await handler(request))
     return logger
+
+async def auth_factory(app, handler):
+    async def auth(request):
+        logging.info('check user: %s %s' % (request.method, request.path))
+        request.__user__ = None
+        cookie_str = request.cookies.get(COOKIE_NAME)
+        if cookie_str:
+            user = await cookie2user(cookie_str)
+            if user:
+                logging.info('set current user: %s' % user.email)
+                request.__user__ = user
+        return (await handler(request))
+        if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
+            return web.HTTPFound('/signin')
+        return (await handler(request))
+    return auth
 
 async def data_factory(app, handler):
     async def parse_data(request):
@@ -80,12 +98,13 @@ async def response_factory(app, handler):
             template = r.get('__template__')
             if template is None:
                 resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
-                resp.content_type = 'application/json;charset=utf-8'
+                resp.content_type = 'application/json;charset=utf-8'             
                 return resp
             else:
+                r['__user__'] = request.__user__              
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'
-                return resp
+                return resp             
         if isinstance(r, int) and r >= 100 and r < 600:
             return web.Response(r)
         if isinstance(r, tuple) and len(r) == 2:
@@ -111,31 +130,10 @@ def datetime_filter(t):
     dt = datetime.fromtimestamp(t)
     return u'%s年%s月%s日' % (dt.year, dt.month, dt.day)
 
-#def index(request):
-#    return web.Response(body=b'<h1>Awesome</h1>', content_type='text/html')
-'''
-@get('/')
-def index(request):
-    users = yield from User.findAll()
-    return {
-        '__template__': 'test.html',
-        'users': users
-    }
-'''
-
-'''
-async def init(loop):
-    app = web.Application(loop=loop)
-    app.router.add_route('GET', '/', index)
-    srv = yield from loop.create_server(app.make_handler(), '127.0.0.1', 9000)
-    logging.info('server started at http://127.0.0.1:9000...')
-    return srv
-'''
-
 async def init(loop):
     await orm.create_pool(loop=loop, **configs.db)
     app = web.Application(loop=loop, middlewares=[
-        logger_factory, response_factory
+        logger_factory, auth_factory, response_factory
     ])
     init_jinja2(app, filters=dict(datetime=datetime_filter))
     add_routes(app, 'handlers')

@@ -1216,6 +1216,558 @@ async def api_get_users():
 ```
 ## Day 10 - 用户注册和登录
 ------
+用户管理涉及到用户注册和登录。
+用户注册相对简单，我们可以先通过API把用户注册这个功能实现了：
+```Python
+_RE_EMAIL = re.compile(r'^[a-z0-9\.\-\_]+\@[a-z0-9\-\_]+(\.[a-z0-9\-\_]+){1,4}$')
+_RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
+
+@post('/api/users')
+def api_register_user(*, email, name, passwd):
+    if not name or not name.strip():
+        raise APIValueError('name')
+    if not email or not _RE_EMAIL.match(email):
+        raise APIValueError('email')
+    if not passwd or not _RE_SHA1.match(passwd):
+        raise APIValueError('passwd')
+    users = yield from User.findAll('email=?', [email])
+    if len(users) > 0:
+        raise APIError('register:failed', 'email', 'Email is already in use.')
+    uid = next_id()
+    sha1_passwd = '%s:%s' % (uid, passwd)
+    user = User(id=uid, name=name.strip(), email=email, passwd=hashlib.sha1(sha1_passwd.encode('utf-8')).hexdigest(), image='http://www.gravatar.com/avatar/%s?d=mm&s=120' % hashlib.md5(email.encode('utf-8')).hexdigest())
+    yield from user.save()
+    # make session cookie:
+    r = web.Response()
+    r.set_cookie(COOKIE_NAME, user2cookie(user, 86400), max_age=86400, httponly=True)
+    user.passwd = '******'
+    r.content_type = 'application/json'
+    r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
+    return r
+```
+注意用户口令是客户端传递的经过SHA1计算后的40位Hash字符串，所以服务器端并不知道用户的原始口令。
+
+接下来可以创建一个注册页面，让用户填写注册表单，然后，提交数据到注册用户的API：
+```Python
+{% extends '__base__.html' %}
+
+{% block title %}注册{% endblock %}
+
+{% block beforehead %}
+
+<script>
+function validateEmail(email) {
+    var re = /^[a-z0-9\.\-\_]+\@[a-z0-9\-\_]+(\.[a-z0-9\-\_]+){1,4}$/;
+    return re.test(email.toLowerCase());
+}
+$(function () {
+    var vm = new Vue({
+        el: '#vm',
+        data: {
+            name: '',
+            email: '',
+            password1: '',
+            password2: ''
+        },
+        methods: {
+            submit: function (event) {
+                event.preventDefault();
+                var $form = $('#vm');
+                if (! this.name.trim()) {
+                    return $form.showFormError('请输入名字');
+                }
+                if (! validateEmail(this.email.trim().toLowerCase())) {
+                    return $form.showFormError('请输入正确的Email地址');
+                }
+                if (this.password1.length < 6) {
+                    return $form.showFormError('口令长度至少为6个字符');
+                }
+                if (this.password1 !== this.password2) {
+                    return $form.showFormError('两次输入的口令不一致');
+                }
+                var email = this.email.trim().toLowerCase();
+                $form.postJSON('/api/users', {
+                    name: this.name.trim(),
+                    email: email,
+                    passwd: CryptoJS.SHA1(email + ':' + this.password1).toString()
+                }, function (err, r) {
+                    if (err) {
+                        return $form.showFormError(err);
+                    }
+                    return location.assign('/');
+                });
+            }
+        }
+    });
+    $('#vm').show();
+});
+</script>
+
+{% endblock %}
+
+{% block content %}
+
+    <div class="uk-width-2-3">
+        <h1>欢迎注册！</h1>
+        <form id="vm" v-on="submit: submit" class="uk-form uk-form-stacked">
+            <div class="uk-alert uk-alert-danger uk-hidden"></div>
+            <div class="uk-form-row">
+                <label class="uk-form-label">名字:</label>
+                <div class="uk-form-controls">
+                    <input v-model="name" type="text" maxlength="50" placeholder="名字" class="uk-width-1-1">
+                </div>
+            </div>
+            <div class="uk-form-row">
+                <label class="uk-form-label">电子邮件:</label>
+                <div class="uk-form-controls">
+                    <input v-model="email" type="text" maxlength="50" placeholder="your-name@example.com" class="uk-width-1-1">
+                </div>
+            </div>
+            <div class="uk-form-row">
+                <label class="uk-form-label">输入口令:</label>
+                <div class="uk-form-controls">
+                    <input v-model="password1" type="password" maxlength="50" placeholder="输入口令" class="uk-width-1-1">
+                </div>
+            </div>
+            <div class="uk-form-row">
+                <label class="uk-form-label">重复口令:</label>
+                <div class="uk-form-controls">
+                    <input v-model="password2" type="password" maxlength="50" placeholder="重复口令" class="uk-width-1-1">
+                </div>
+            </div>
+            <div class="uk-form-row">
+                <button type="submit" class="uk-button uk-button-primary"><i class="uk-icon-user"></i> 注册</button>
+            </div>
+        </form>
+    </div>
+
+{% endblock %}
+```
+这样我们就把用户注册的功能完成了：
+
+用户登录比用户注册复杂。由于HTTP协议是一种无状态协议，而服务器要跟踪用户状态，就只能通过cookie实现。大多数Web框架提供了Session功能来封装保存用户状态的cookie。
+
+Session的优点是简单易用，可以直接从Session中取出用户登录信息。
+
+Session的缺点是服务器需要在内存中维护一个映射表来存储用户登录信息，如果有两台以上服务器，就需要对Session做集群，因此，使用Session的Web App很难扩展。
+
+我们采用直接读取cookie的方式来验证用户登录，每次用户访问任意URL，都会对cookie进行验证，这种方式的好处是保证服务器处理任意的URL都是无状态的，可以扩展到多台服务器。
+
+由于登录成功后是由服务器生成一个cookie发送给浏览器，所以，要保证这个cookie不会被客户端伪造出来。
+
+实现防伪造cookie的关键是通过一个单向算法（例如SHA1），举例如下：
+
+当用户输入了正确的口令登录成功后，服务器可以从数据库取到用户的id，并按照如下方式计算出一个字符串：
+```Python
+"用户id" + "过期时间" + SHA1("用户id" + "用户口令" + "过期时间" + "SecretKey")
+```
+当浏览器发送cookie到服务器端后，服务器可以拿到的信息包括：
+* 用户id
+* 过期时间
+* SHA1值
+
+如果未到过期时间，服务器就根据用户id查找用户口令，并计算：
+```Python
+SHA1("用户id" + "用户口令" + "过期时间" + "SecretKey")
+```
+并与浏览器cookie中的哈希进行比较，如果相等，则说明用户已登录，否则，cookie就是伪造的。
+
+这个算法的关键在于SHA1是一种单向算法，即可以通过原始字符串计算出SHA1结果，但无法通过SHA1结果反推出原始字符串。
+
+所以登录API可以实现如下：
+```Python
+@post('/api/authenticate')
+def authenticate(*, email, passwd):
+    if not email:
+        raise APIValueError('email', 'Invalid email.')
+    if not passwd:
+        raise APIValueError('passwd', 'Invalid password.')
+    users = yield from User.findAll('email=?', [email])
+    if len(users) == 0:
+        raise APIValueError('email', 'Email not exist.')
+    user = users[0]
+    # check passwd:
+    sha1 = hashlib.sha1()
+    sha1.update(user.id.encode('utf-8'))
+    sha1.update(b':')
+    sha1.update(passwd.encode('utf-8'))
+    if user.passwd != sha1.hexdigest():
+        raise APIValueError('passwd', 'Invalid password.')
+    # authenticate ok, set cookie:
+    r = web.Response()
+    r.set_cookie(COOKIE_NAME, user2cookie(user, 86400), max_age=86400, httponly=True)
+    user.passwd = '******'
+    r.content_type = 'application/json'
+    r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
+    return r
+
+# 计算加密cookie:
+def user2cookie(user, max_age):
+    # build cookie string by: id-expires-sha1
+    expires = str(int(time.time() + max_age))
+    s = '%s-%s-%s-%s' % (user.id, user.passwd, expires, _COOKIE_KEY)
+    L = [user.id, expires, hashlib.sha1(s.encode('utf-8')).hexdigest()]
+    return '-'.join(L)
+```
+对于每个URL处理函数，如果我们都去写解析cookie的代码，那会导致代码重复很多次。
+
+利用middle在处理URL之前，把cookie解析出来，并将登录用户绑定到request对象上，这样，后续的URL处理函数就可以直接拿到登录用户：
+```Python
+@asyncio.coroutine
+def auth_factory(app, handler):
+    @asyncio.coroutine
+    def auth(request):
+        logging.info('check user: %s %s' % (request.method, request.path))
+        request.__user__ = None
+        cookie_str = request.cookies.get(COOKIE_NAME)
+        if cookie_str:
+            user = yield from cookie2user(cookie_str)
+            if user:
+                logging.info('set current user: %s' % user.email)
+                request.__user__ = user
+        return (yield from handler(request))
+    return auth
+
+# 解密cookie:
+@asyncio.coroutine
+def cookie2user(cookie_str):
+    '''
+    Parse cookie and load user if cookie is valid.
+    '''
+    if not cookie_str:
+        return None
+    try:
+        L = cookie_str.split('-')
+        if len(L) != 3:
+            return None
+        uid, expires, sha1 = L
+        if int(expires) < time.time():
+            return None
+        user = yield from User.find(uid)
+        if user is None:
+            return None
+        s = '%s-%s-%s-%s' % (uid, user.passwd, expires, _COOKIE_KEY)
+        if sha1 != hashlib.sha1(s.encode('utf-8')).hexdigest():
+            logging.info('invalid sha1')
+            return None
+        user.passwd = '******'
+        return user
+    except Exception as e:
+        logging.exception(e)
+        return None
+```
+这样，我们就完成了用户注册和登录的功能。
+
+注册和登陆时都出现了`HTTP 500`错误，解决方案在`handlers.py`中的非协程函数在函数定义之前加上`async`，并且将`yield from`改为`await`。
+## Day 11 - 编写日志创建页
+------
+在Web开发中，后端代码写起来其实是相当容易的。
+
+例如，我们编写一个REST API，用于创建一个Blog：
+```Python
+@post('/api/blogs')
+def api_create_blog(request, *, name, summary, content):
+    check_admin(request)
+    if not name or not name.strip():
+        raise APIValueError('name', 'name cannot be empty.')
+    if not summary or not summary.strip():
+        raise APIValueError('summary', 'summary cannot be empty.')
+    if not content or not content.strip():
+        raise APIValueError('content', 'content cannot be empty.')
+    blog = Blog(user_id=request.__user__.id, user_name=request.__user__.name, user_image=request.__user__.image, name=name.strip(), summary=summary.strip(), content=content.strip())
+    yield from blog.save()
+    return blog
+```
+编写后端Python代码不但很简单，而且非常容易测试，上面的API：`api_create_blog()`本身只是一个普通函数。
+
+Web开发真正困难的地方在于编写前端页面。前端页面需要混合HTML、CSS和JavaScript，如果对这三者没有深入地掌握，编写的前端页面将很快难以维护。
+
+更大的问题在于，前端页面通常是动态页面，也就是说，前端页面往往是由后端代码生成的。
+
+生成前端页面最早的方式是拼接字符串：
+```Python
+s = '<html><head><title>'
+    + title
+    + '</title></head><body>'
+    + body
+    + '</body></html>'
+```
+显然这种方式完全不具备可维护性。所以有第二种模板方式：
+```Python
+<html>
+<head>
+    <title>{{ title }}</title>
+</head>
+<body>
+    {{ body }}
+</body>
+</html>
+```
+ASP、JSP、PHP等都是用这种模板方式生成前端页面。
+
+如果在页面上大量使用JavaScript（事实上大部分页面都会），模板方式仍然会导致JavaScript代码与后端代码绑得非常紧密，以至于难以维护。其根本原因在于负责显示的HTML DOM模型与负责数据和交互的JavaScript代码没有分割清楚。
+
+要编写可维护的前端代码绝非易事。和后端结合的MVC模式已经无法满足复杂页面逻辑的需要了，所以，新的[MVVM](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93viewmodel)：Model View ViewModel模式应运而生。
+
+MVVM最早由微软提出来，它借鉴了桌面应用程序的MVC思想，在前端页面中，把Model用纯JavaScript对象表示：
+```Python
+<script>
+    var blog = {
+        name: 'hello',
+        summary: 'this is summary',
+        content: 'this is content...'
+    };
+</script>
+```
+View是纯HTML：
+```Python
+<form action="/api/blogs" method="post">
+    <input name="name">
+    <input name="summary">
+    <textarea name="content"></textarea>
+    <button type="submit">OK</button>
+</form>
+```
+由于Model表示数据，View负责显示，两者做到了最大限度的分离。
+
+把Model和View关联起来的就是ViewModel。ViewModel负责把Model的数据同步到View显示出来，还负责把View的修改同步回Model。
+
+ViewModel如何编写？需要用JavaScript编写一个通用的ViewModel，这样，就可以复用整个MVVM模型了。
+
+好消息是已有许多成熟的MVVM框架，例如AngularJS，KnockoutJS等。我们选择[Vue](https://vuejs.org/)这个简单易用的MVVM框架来实现创建Blog的页面`templates/manage_blog_edit.html`：
+```Python
+{% extends '__base__.html' %}
+
+{% block title %}编辑日志{% endblock %}
+
+{% block beforehead %}
+
+<script>
+var
+    ID = '{{ id }}',
+    action = '{{ action }}';
+function initVM(blog) {
+    var vm = new Vue({
+        el: '#vm',
+        data: blog,
+        methods: {
+            submit: function (event) {
+                event.preventDefault();
+                var $form = $('#vm').find('form');
+                $form.postJSON(action, this.$data, function (err, r) {
+                    if (err) {
+                        $form.showFormError(err);
+                    }
+                    else {
+                        return location.assign('/api/blogs/' + r.id);
+                    }
+                });
+            }
+        }
+    });
+    $('#vm').show();
+}
+$(function () {
+    if (ID) {
+        getJSON('/api/blogs/' + ID, function (err, blog) {
+            if (err) {
+                return fatal(err);
+            }
+            $('#loading').hide();
+            initVM(blog);
+        });
+    }
+    else {
+        $('#loading').hide();
+        initVM({
+            name: '',
+            summary: '',
+            content: ''
+        });
+    }
+});
+</script>
+
+{% endblock %}
+
+{% block content %}
+
+    <div class="uk-width-1-1 uk-margin-bottom">
+        <div class="uk-panel uk-panel-box">
+            <ul class="uk-breadcrumb">
+                <li><a href="/manage/comments">评论</a></li>
+                <li><a href="/manage/blogs">日志</a></li>
+                <li><a href="/manage/users">用户</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div id="error" class="uk-width-1-1">
+    </div>
+
+    <div id="loading" class="uk-width-1-1 uk-text-center">
+        <span><i class="uk-icon-spinner uk-icon-medium uk-icon-spin"></i> 正在加载...</span>
+    </div>
+
+    <div id="vm" class="uk-width-2-3">
+        <form v-on="submit: submit" class="uk-form uk-form-stacked">
+            <div class="uk-alert uk-alert-danger uk-hidden"></div>
+            <div class="uk-form-row">
+                <label class="uk-form-label">标题:</label>
+                <div class="uk-form-controls">
+                    <input v-model="name" name="name" type="text" placeholder="标题" class="uk-width-1-1">
+                </div>
+            </div>
+            <div class="uk-form-row">
+                <label class="uk-form-label">摘要:</label>
+                <div class="uk-form-controls">
+                    <textarea v-model="summary" rows="4" name="summary" placeholder="摘要" class="uk-width-1-1" style="resize:none;"></textarea>
+                </div>
+            </div>
+            <div class="uk-form-row">
+                <label class="uk-form-label">内容:</label>
+                <div class="uk-form-controls">
+                    <textarea v-model="content" rows="16" name="content" placeholder="内容" class="uk-width-1-1" style="resize:none;"></textarea>
+                </div>
+            </div>
+            <div class="uk-form-row">
+                <button type="submit" class="uk-button uk-button-primary"><i class="uk-icon-save"></i> 保存</button>
+                <a href="/manage/blogs" class="uk-button"><i class="uk-icon-times"></i> 取消</a>
+            </div>
+        </form>
+    </div>
+
+{% endblock %}
+```
+初始化Vue时，我们指定3个参数：
+
+el：根据选择器查找绑定的View，这里是`#vm`，就是id为`vm`的DOM，对应的是一个`<div>`标签；
+
+data：JavaScript对象表示的Model，我们初始化为`{ name: '', summary: '', content: ''}`；
+
+methods：View可以触发的JavaScript函数，`submit`就是提交表单时触发的函数。
+
+接下来，我们在`<form>`标签中，用几个简单的`v-model`，就可以让Vue把Model和View关联起来：
+```Python
+<!-- input的value和Model的name关联起来了 -->
+<input v-model="name" class="uk-width-1-1">
+```
+Form表单通过`<form v-on="submit: submit">`把提交表单的事件关联到`submit`方法。
+
+需要特别注意的是，在MVVM中，Model和View是双向绑定的。如果我们在Form中修改了文本框的值，可以在Model中立刻拿到新的值。试试在表单中输入文本，然后在Chrome浏览器中打开JavaScript控制台，可以通过`vm.name`访问单个属性，或者通过`vm.$data`访问整个Model：
+
+
+如果我们在JavaScript逻辑中修改了Model，这个修改会立刻反映到View上。试试在JavaScript控制台输入`vm.name = 'MVVM简介'`，可以看到文本框的内容自动被同步了：
+
+双向绑定是MVVM框架最大的作用。借助于MVVM，我们把复杂的显示逻辑交给框架完成。由于后端编写了独立的REST API，所以，前端用AJAX提交表单非常容易，前后端分离得非常彻底。
+
+
+错误：
+```Python
+  File "D:\Software\Anaconda3\lib\site-packages\aiohttp\web_protocol.py", line 230, in data_received
+    messages, upgraded, tail = self._request_parser.feed_data(data)
+```
+解决方案：[讨论](https://www.liaoxuefeng.com/discuss/001409195742008d822b26cf3de46aea14f2b7378a1ba91000/001527144624433b96a7d87b22e4af0b9b3e1cff5a72ece000)
+
+上述解决了问题一小部分，即页面无法显示的问题，通过和上节的解决方法类似。但仍有问题无法解决，就是在/manage/blogs/create时在页面出现permission:forbidden，通读代码，关于request.__user__不为空，handler(request)的定义通过查阅[aiohttp官方文档](https://docs.aiohttp.org/en/stable/)。
+
+参考
+
+https://blog.csdn.net/su749520/article/details/79037775
+
+https://blog.csdn.net/jyk920902/article/details/78262416
+
+**最终问题没有解决**
+
+Web框架梳理：
+
+框架的调用代码：
+
+```Python
+app = web.Application(loop=loop, middlewares=[logger_factory, response_factory])
+init_jinja2(app, filters=dict(datetime=datetime_filter))
+add_routes(app, 'handlers')
+add_static(app)
+```
+使用web.Application类创建aiohttp server(app)，其中loop为Eventloop用来处理HTTP请求，middlewares为中间件，在这里用来记录日志并处理handler返回的数据为web.response对象
+```Python
+async def response_factory(app, handler):
+    async def response(request):
+        logging.info('Response handler...')
+        #获取handler的返回值，根据返回值的不同类型进行处理
+        r = await handler(request)
+        print(type(r))
+        if isinstance(r, web.StreamResponse):
+            return r
+        if isinstance(r, bytes):
+            resp = web.Response(body=r)
+            resp.content_type = 'application/octet-stream'
+            return resp
+        if isinstance(r, str):
+            if r.startswith('redirect:'):
+                return web.HTTPFound(r[9:])
+            resp = web.Response(body=r.encode('utf-8'))
+            resp.content_type = 'text/html;charset=utf-8'
+            return resp
+        if isinstance(r, dict):
+            template = r.get('__template__')
+            if template is None:
+                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
+                resp.content_type = 'application/json;charset=utf-8'
+                return resp
+            else:
+                resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
+                resp.content_type = 'text/html;charset=utf-8'
+                return resp
+        if isinstance(r, int) and r >= 100 and r < 600:
+            return web.Response(r)
+        if isinstance(r, tuple) and len(r) == 2:
+            t, m = r
+            if isinstance(t, int) and t >= 100 and t < 600:
+                return web.Response(t, str(m))
+        # default:
+        resp = web.Response(body=str(r).encode('utf-8'))
+        resp.content_type = 'text/plain;charset=utf-8'
+        return resp
+    return response
+```
+注册处理url的handler，aiohttp中的add_route函数进行注册，我们这里使用add_routes对'handlers'模块的handler进行批量注册
+```Python
+def add_route(app, fn):
+    method = getattr(fn, '__method__', None)
+    path = getattr(fn, '__route__', None)
+    if path is None or method is None:
+        raise ValueError('@get or @post not defined in %s.' % str(fn))
+    if not asyncio.iscoroutinefunction(fn) and not inspect.isgeneratorfunction(fn):
+        fn = asyncio.coroutine(fn)
+    logging.info('add route %s %s => %s(%s)' % (method, path, fn.__name__, ', '.join(inspect.signature(fn).parameters.keys())))
+    app.router.add_route(method, path, RequestHandler(app, fn))
+
+def add_routes(app, module_name):
+    #找到'.'则返回其所在位置，否则返回-1
+    n = module_name.rfind('.')
+    if n == (-1):
+        #mod为包含module_name模块中全部属性和方法的list
+        mod = __import__(module_name, globals(), locals())
+    else:
+        name = module_name[n+1:]
+        mod = getattr(__import__(module_name[:n], globals(), locals(), [name]), name)
+    for attr in dir(mod):
+        #检查handler是否被@get或@post装饰
+        if attr.startswith('_'):
+            continue
+        fn = getattr(mod, attr)
+        if callable(fn):
+            method = getattr(fn, '__method__', None)
+            path = getattr(fn, '__route__', None)
+            if method and path:
+                add_route(app, fn)
+```
+RequestHandler类，它具有call，所以可以像调用函数一样调用其实例，这里RequestHandler类主要是对handler进行封装，获取request中传入的参数并传入handler中。
+
+## Day 12 - 编写日志列表页
+------
+
 ```Python
 
 ```
