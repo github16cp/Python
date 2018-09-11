@@ -60,6 +60,8 @@ async def auth_factory(app, handler):
             if user:
                 logging.info('set current user: %s' % user.email)
                 request.__user__ = user
+                logging.info('request.__user__: %s' % request.__user__)
+                logging.info('request.__user__.admin: %s' % request.__user__.admin)
         return (await handler(request))
         if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
             return web.HTTPFound('/signin')
@@ -81,7 +83,7 @@ async def data_factory(app, handler):
 async def response_factory(app, handler):
     async def response(request):
         logging.info('Response handler...')
-        r = await handler(request)
+        r = await handler(request) #{'error': 'permission:forbidden', 'data': 'permission', 'message': ''}->RequestHandler
         if isinstance(r, web.StreamResponse):
             return r
         if isinstance(r, bytes):
@@ -95,16 +97,16 @@ async def response_factory(app, handler):
             resp.content_type = 'text/html;charset=utf-8'
             return resp
         if isinstance(r, dict):
-            template = r.get('__template__')
+            template = r.get('__template__') 
             if template is None:
-                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
-                resp.content_type = 'application/json;charset=utf-8'             
+                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))#将r转化为JSON格式
+                resp.content_type = 'application/json;charset=utf-8'            
                 return resp
             else:
                 r['__user__'] = request.__user__              
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'
-                return resp             
+                return resp
         if isinstance(r, int) and r >= 100 and r < 600:
             return web.Response(r)
         if isinstance(r, tuple) and len(r) == 2:
@@ -133,7 +135,7 @@ def datetime_filter(t):
 async def init(loop):
     await orm.create_pool(loop=loop, **configs.db)
     app = web.Application(loop=loop, middlewares=[
-        logger_factory, auth_factory, response_factory
+        logger_factory, auth_factory, data_factory, response_factory
     ])
     init_jinja2(app, filters=dict(datetime=datetime_filter))
     add_routes(app, 'handlers')

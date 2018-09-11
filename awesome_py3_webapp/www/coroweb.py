@@ -7,9 +7,7 @@ from aiohttp import web
 from apis import APIError
 
 def get(path):
-    '''
-    Define decorator @get('/path')
-    '''
+    #Define decorator @get('/path')
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kw):
@@ -20,9 +18,7 @@ def get(path):
     return decorator
 
 def post(path):
-    '''
-    Define decorator @post('/path')
-    '''
+    #Define decorator @post('/path')
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kw):
@@ -78,10 +74,10 @@ class RequestHandler(object):
         self._app = app
         self._func = fn
         self._has_request_arg = has_request_arg(fn)
-        self._has_var_kw_arg = has_var_kw_arg(fn)
-        self._has_named_kw_args = has_named_kw_args(fn)
-        self._named_kw_args = get_named_kw_args(fn)
-        self._required_kw_args = get_required_kw_args(fn)
+        self._has_var_kw_arg = has_var_kw_arg(fn) #是否_包含_可变关键字参数
+        self._has_named_kw_args = has_named_kw_args(fn) #是否_包含_命名关键字参数
+        self._named_kw_args = get_named_kw_args(fn) 
+        self._required_kw_args = get_required_kw_args(fn) #必需的_关键字参数
 
     async def __call__(self, request):
         kw = None
@@ -131,7 +127,6 @@ class RequestHandler(object):
         logging.info('call with args: %s' % str(kw))
         try:
             r = await self._func(**kw)
-            logging.info('call with args: %s' % r)
             return r
         except APIError as e:
             return dict(error=e.error, data=e.data, message=e.message)
@@ -167,3 +162,5 @@ def add_routes(app, module_name):
             path = getattr(fn, '__route__', None)
             if method and path:
                 add_route(app, fn)
+
+ 

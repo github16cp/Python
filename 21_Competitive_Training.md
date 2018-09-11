@@ -1679,6 +1679,43 @@ https://blog.csdn.net/jyk920902/article/details/78262416
 
 **最终问题没有解决**
 
+RequestHandler
+
+RequestHandler定义的是类，但本质上是一个函数，`index`函数里是包含了一个`request`参数的，但我们新定义的很多函数中，`request`参数都是可以被省略掉的，那是因为新定义的函数最终都是被`RequestHandler`处理，自动加上一个`request`参数，从而符合`app.router.add_route`第三个参数的要求，所以说`RequestHandler`起到统一标准化接口的作用。
+
+接口是统一了，但每个函数要求的参数都是不一样的，那又要如何解决呢？得益于 **factory** 的理念，我们很容易找一种解决方案，就如同`response_factory`一样把任何类型的返回值最后都统一封装成一个`web.Response`对象。`RequestHandler`也可以把任何参数都变成`self._func(**kw)`的形式。那问题来了，那kw的参数到底要去哪里去获取呢？
+1. `request.match_info`的参数： `match_info`主要是保存`@get('/blog/{id}')`里面的`id`，就是路由路径里的参数
+2. `GET`的参数： 例如`/?page=2`
+3. `POST`的参数： `api`的`json`或者是网页中`form`
+4. `request`参数： 有时需要验证用户信息就需要获取`request`里面的数据
+
+`RequestHandler`的主要作用就是构成标准的`app.router.add_route`第三个参数，还有就是获取不同的函数的对应的参数，就这两个主要作用。
+
+[讨论](https://www.liaoxuefeng.com/discuss/001409195742008d822b26cf3de46aea14f2b7378a1ba91000/001462893855750f848630bb19c43c582fdff90f58cbee0000)
+
+[示例代码](https://github.com/moling3650/mblog/blob/master/www/app/frame/__init__.py)
+
+**写代码要实事求是，不要模棱两可。拿不准的地方就卯上劲闹明白，这里也拿不准，那里也拿不准，后边就很难掌握这个项目了。**
+
+[链接](https://www.liaoxuefeng.com/discuss/001409195742008d822b26cf3de46aea14f2b7378a1ba91000/001462893855750f848630bb19c43c582fdff90f58cbee0000?page=2)
+
+**问题解决了**
+```Python
+def check_admin(request):
+    #if request.__user__ is None or not request.__user__.admin:
+    if request.__user__ is None:
+        raise APIPermissionError()
+```
+原因是登录的账户名不是admin管理员账户，后续再针对细节研究一下
+
+更改如下，进入mysql然后将自己用户名的admin权限改为1
+```Python
+select * from users;
+update users set admin = 1;
+select * from users;
+```
+此时所有用户都有管理员权限了，另外新建的用户都没有管理员权限，然后此时就不会出现permission denied了，新建的用户仍会出现这个权限问题。这时候需要重新启动一下Python，才能生效。
+
 Web框架梳理：
 
 框架的调用代码：
