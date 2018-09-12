@@ -4,29 +4,29 @@
 -------
 ### 搭建开发环境
 首先，确认系统安装的Python版本是3.6.x：
-```Python
+```
 $ python3 --version
 Python 3.6.1
 ```
 然后，用`pip`安装开发Web App需要的第三方库：
 
 异步框架`aiohttp`：
-```Python
+```
 $pip3 install aiohttp
 ```
 前端模板引擎jinja2：
-```Python
+```
 $ pip3 install jinja2
 ```
 MySQL 5.x数据库，从[官方网站](https://dev.mysql.com/downloads/mysql/5.6.html)下载并安装，安装完毕后，请务必牢记root口令。为避免遗忘口令，建议直接把root口令设置为password；
 
 MySQL的Python异步驱动程序aiomysql：
-```Python
+```
 $ pip3 install aiomysql
 ```
 ### 项目结构
 选择一个工作目录，然后，我们建立如下的目录结构：
-```Python
+```
 awesome-python3-webapp/  <-- 根目录
 |
 +- backup/               <-- 备份目录
@@ -53,7 +53,7 @@ awesome-python3-webapp/  <-- 根目录
 自备，推荐用Sublime Text，请参考[使用文本编辑器](https://www.liaoxuefeng.com/wiki/0014316089557264a6b348958f449949df42a6d3a2e542c000/0014316399410395f704750ee9440228135925a6ca1dad8000)。
 ### 附
 用Anaconda搭建运行环境：
-```Python
+```
 conda create --name webpy3 python=3.6
 conda activate webpy3
 conda install xxx
@@ -87,7 +87,7 @@ loop.run_until_complete(init(loop))
 loop.run_forever()
 ```
 运行`python app.py`，Web App将在`9000`端口监听HTTP请求，并且对首页`/`进行响应：
-```Python
+```
 $ python3 app.py
 INFO:root:server started at http://127.0.0.1:9000...
 ```
@@ -433,7 +433,7 @@ class Comment(Model):
 
 ### 初始化数据库表
 如果表的数量很少，可以手写创建表的SQL脚本：
-```Python
+```
 -- schema.sql
 
 drop database if exists awesome;
@@ -485,7 +485,7 @@ create table comments (
 如果表的数量很多，可以从`Model`对象直接通过脚本自动生成SQL脚本，使用更简单。
 
 把SQL脚本放到MySQL命令行里执行：
-```Python
+```
 $ mysql -u root -p < schema.sql
 ```
 我们就完成了数据库表的初始化。
@@ -524,7 +524,7 @@ loop.run_until_complete(test())
 loop.close()
 ```
 `注意`：在测试之前首先启动mysql，执行schema.sql脚本，步骤结构如下：
-```Python
+```
 盘符>mysql -u root -p
 Enter password:
 Welcome to the MySQL monitor.  Commands end with ; or \g.
@@ -860,7 +860,7 @@ def index(request):
     }
 ```
 `'__template__'`指定的模板文件是`test.html`，其他参数是传递给模板的数据，所以我们在模板的根目录`templates`下创建`test.html`：
-```Python
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -876,7 +876,7 @@ def index(request):
 </html>
 ```
 接下来，如果一切顺利，可以用命令行启动Web服务器：
-```Python
+```
 $ python3 app.py
 ```
 然后，在浏览器中访问`http://localhost:9000/`。
@@ -933,7 +933,7 @@ static/
 但是include方法不利于页面整体结构的维护。jinjia2的模板还有另一种“继承”方式，实现模板的复用更简单。
 
 “继承”模板的方式是通过编写一个“父模板”，在父模板中定义一些可替换的block（块）。然后，编写多个“子模板”，每个子模板都可以只替换父模板定义的block。比如，定义一个最简单的父模板：
-```Python
+```html
 <!-- base.html -->
 <html>
     <head>
@@ -972,7 +972,7 @@ static/
 这样，一旦定义好父模板的整体布局和CSS样式，编写子模板就会非常容易。
 
 让我们通过uikit这个CSS框架来完成父模板`__base__.html`的编写：
-```Python
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -1248,7 +1248,7 @@ def api_register_user(*, email, name, passwd):
 注意用户口令是客户端传递的经过SHA1计算后的40位Hash字符串，所以服务器端并不知道用户的原始口令。
 
 接下来可以创建一个注册页面，让用户填写注册表单，然后，提交数据到注册用户的API：
-```Python
+```html
 {% extends '__base__.html' %}
 
 {% block title %}注册{% endblock %}
@@ -1510,7 +1510,7 @@ ASP、JSP、PHP等都是用这种模板方式生成前端页面。
 要编写可维护的前端代码绝非易事。和后端结合的MVC模式已经无法满足复杂页面逻辑的需要了，所以，新的[MVVM](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93viewmodel)：Model View ViewModel模式应运而生。
 
 MVVM最早由微软提出来，它借鉴了桌面应用程序的MVC思想，在前端页面中，把Model用纯JavaScript对象表示：
-```Python
+```javascript
 <script>
     var blog = {
         name: 'hello',
@@ -1535,7 +1535,7 @@ View是纯HTML：
 ViewModel如何编写？需要用JavaScript编写一个通用的ViewModel，这样，就可以复用整个MVVM模型了。
 
 好消息是已有许多成熟的MVVM框架，例如AngularJS，KnockoutJS等。我们选择[Vue](https://vuejs.org/)这个简单易用的MVVM框架来实现创建Blog的页面`templates/manage_blog_edit.html`：
-```Python
+```html
 {% extends '__base__.html' %}
 
 {% block title %}编辑日志{% endblock %}
@@ -1648,7 +1648,7 @@ data：JavaScript对象表示的Model，我们初始化为`{ name: '', summary: 
 methods：View可以触发的JavaScript函数，`submit`就是提交表单时触发的函数。
 
 接下来，我们在`<form>`标签中，用几个简单的`v-model`，就可以让Vue把Model和View关联起来：
-```Python
+```html
 <!-- input的value和Model的name关联起来了 -->
 <input v-model="name" class="uk-width-1-1">
 ```
@@ -1830,7 +1830,7 @@ def manage_blogs(*, page='1'):
 }
 ```
 然后，通过Vue初始化MVVM：
-```Python
+```javascript
 <script>
 function initVM(data) {
     var vm = new Vue({
@@ -1941,7 +1941,7 @@ def check_admin(request):
 原因是登录的账户名不是admin管理员账户，后续再针对细节研究一下
 
 更改如下，进入mysql然后将自己用户名的admin权限改为1
-```Python
+```mysql
 select * from users;
 update users set admin = 1;
 select * from users;
@@ -1965,7 +1965,7 @@ Django的开发环境在Debug模式下就可以做到自动重新加载，如果
 按照这个思路，我们可以编写一个辅助程序`pymonitor.py`，让它启动`wsgiapp.py`，并时刻监控`www`目录下的代码改动，有改动时，先把当前`wsgiapp.py`进程杀掉，再重启，就完成了服务器进程的自动重启。
 
 要监控目录文件的变化，我们也无需自己手动定时扫描，Python的第三方库`watchdog`可以利用操作系统的API来监控目录文件的变化，并发送通知。我们先用`pip`安装：
-```Python
+```
 $ pip3 install watchdog
 ```
 利用`watchdog`接收文件变化的通知，如果是`.py`文件，就自动重启`wsgiapp.py`进程。
@@ -2042,15 +2042,15 @@ if __name__ == '__main__':
     start_watch(path, None)
 ```
 一共70行左右的代码，就实现了Debug模式的自动重新加载。用下面的命令启动服务器：
-```Python
+```
 $ python3 pymonitor.py wsgiapp.py
 ```
 或者给`pymonitor.py`加上可执行权限，启动服务器：
-```Python
+```
 $ ./pymonitor.py app.py
 ```
 在编辑器中打开一个`.py`文件，修改后保存，看看命令行输出，是不是自动重启了服务器：
-```Python
+```
 $ ./pymonitor.py app.py 
 [Monitor] Watching directory /Users/michael/Github/awesome-python3-webapp/www...
 [Monitor] Start process python app.py...
@@ -2067,7 +2067,7 @@ INFO:root:application (/Users/michael/Github/awesome-python3-webapp/www) will st
 
 ------
 错误
-```Python
+```
 F:\Python\awesome_py3_webapp\www>python pymonitor.py app.py
 [Monitor] Watching directory F:\Python\awesome_py3_webapp\www...
 [Monitor] Start process python3 app.py...
@@ -2085,7 +2085,7 @@ Traceback (most recent call last):
 FileNotFoundError: [WinError 2] 系统找不到指定的文件。
 ```
 修改路径和指令之后的错误
-```Python
+```
 F:\Python\awesome_py3_webapp\www>python pymonitor.py app.py
 [Monitor] Watching directory F:\Python\awesome_py3_webapp\www...
 [Monitor] Start process python3 app.py...
@@ -2143,7 +2143,7 @@ if __name__ == '__main__':
 python pymonitor.py app.py
 ```
 得到正确监听管理结果
-```Python
+```
 PS F:\Python\awesome_py3_webapp\www> python pymonitor.py app.py
 F:\Python\awesome_py3_webapp\www
 [Monitor] Watching directory F:\Python\awesome_py3_webapp\www...
