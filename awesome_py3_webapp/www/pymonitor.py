@@ -63,7 +63,7 @@ if __name__ == '__main__':
         exit(0)
     if argv[0] != 'python':
         argv.insert(0, 'python')
-    command = argv  
+    command = argv 
     path = os.path.dirname(os.path.abspath(__file__))
     print(path)
     start_watch(path, None)
