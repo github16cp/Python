@@ -1661,7 +1661,7 @@ Form表单通过`<form v-on="submit: submit">`把提交表单的事件关联到`
 
 双向绑定是MVVM框架最大的作用。借助于MVVM，我们把复杂的显示逻辑交给框架完成。由于后端编写了独立的REST API，所以，前端用AJAX提交表单非常容易，前后端分离得非常彻底。
 
-
+---------------------
 错误：
 ```Python
   File "D:\Software\Anaconda3\lib\site-packages\aiohttp\web_protocol.py", line 230, in data_received
@@ -1679,42 +1679,7 @@ https://blog.csdn.net/jyk920902/article/details/78262416
 
 **最终问题没有解决**
 
-RequestHandler
 
-RequestHandler定义的是类，但本质上是一个函数，`index`函数里是包含了一个`request`参数的，但我们新定义的很多函数中，`request`参数都是可以被省略掉的，那是因为新定义的函数最终都是被`RequestHandler`处理，自动加上一个`request`参数，从而符合`app.router.add_route`第三个参数的要求，所以说`RequestHandler`起到统一标准化接口的作用。
-
-接口是统一了，但每个函数要求的参数都是不一样的，那又要如何解决呢？得益于 **factory** 的理念，我们很容易找一种解决方案，就如同`response_factory`一样把任何类型的返回值最后都统一封装成一个`web.Response`对象。`RequestHandler`也可以把任何参数都变成`self._func(**kw)`的形式。那问题来了，那kw的参数到底要去哪里去获取呢？
-1. `request.match_info`的参数： `match_info`主要是保存`@get('/blog/{id}')`里面的`id`，就是路由路径里的参数
-2. `GET`的参数： 例如`/?page=2`
-3. `POST`的参数： `api`的`json`或者是网页中`form`
-4. `request`参数： 有时需要验证用户信息就需要获取`request`里面的数据
-
-`RequestHandler`的主要作用就是构成标准的`app.router.add_route`第三个参数，还有就是获取不同的函数的对应的参数，就这两个主要作用。
-
-[讨论](https://www.liaoxuefeng.com/discuss/001409195742008d822b26cf3de46aea14f2b7378a1ba91000/001462893855750f848630bb19c43c582fdff90f58cbee0000)
-
-[示例代码](https://github.com/moling3650/mblog/blob/master/www/app/frame/__init__.py)
-
-**写代码要实事求是，不要模棱两可。拿不准的地方就卯上劲闹明白，这里也拿不准，那里也拿不准，后边就很难掌握这个项目了。**
-
-[链接](https://www.liaoxuefeng.com/discuss/001409195742008d822b26cf3de46aea14f2b7378a1ba91000/001462893855750f848630bb19c43c582fdff90f58cbee0000?page=2)
-
-**问题解决了**
-```Python
-def check_admin(request):
-    #if request.__user__ is None or not request.__user__.admin:
-    if request.__user__ is None:
-        raise APIPermissionError()
-```
-原因是登录的账户名不是admin管理员账户，后续再针对细节研究一下
-
-更改如下，进入mysql然后将自己用户名的admin权限改为1
-```Python
-select * from users;
-update users set admin = 1;
-select * from users;
-```
-此时所有用户都有管理员权限了，另外新建的用户都没有管理员权限，然后此时就不会出现permission denied了，新建的用户仍会出现这个权限问题。这时候需要重新启动一下Python，才能生效。
 
 Web框架梳理：
 
@@ -1804,7 +1769,407 @@ RequestHandler类，它具有call，所以可以像调用函数一样调用其�
 
 ## Day 12 - 编写日志列表页
 ------
+MVVM模式不但可用于Form表单，在复杂的管理页面中也能大显身手。例如，分页显示Blog的功能，我们先把后端代码写出来：
 
+在`apis.py`中定义一个`Page`类用于存储分页信息：
 ```Python
+class Page(object):
 
+    def __init__(self, item_count, page_index=1, page_size=10):
+        self.item_count = item_count
+        self.page_size = page_size
+        self.page_count = item_count // page_size + (1 if item_count % page_size > 0 else 0)
+        if (item_count == 0) or (page_index > self.page_count):
+            self.offset = 0
+            self.limit = 0
+            self.page_index = 1
+        else:
+            self.page_index = page_index
+            self.offset = self.page_size * (page_index - 1)
+            self.limit = self.page_size
+        self.has_next = self.page_index < self.page_count
+        self.has_previous = self.page_index > 1
+
+    def __str__(self):
+        return 'item_count: %s, page_count: %s, page_index: %s, page_size: %s, offset: %s, limit: %s' % (self.item_count, self.page_count, self.page_index, self.page_size, self.offset, self.limit)
+
+    __repr__ = __str__
+```
+在`handlers.py`中实现API：
+```Python
+@get('/api/blogs')
+def api_blogs(*, page='1'):
+    page_index = get_page_index(page)
+    num = yield from Blog.findNumber('count(id)')
+    p = Page(num, page_index)
+    if num == 0:
+        return dict(page=p, blogs=())
+    blogs = yield from Blog.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    return dict(page=p, blogs=blogs)
+```
+管理页面：
+```Python
+@get('/manage/blogs')
+def manage_blogs(*, page='1'):
+    return {
+        '__template__': 'manage_blogs.html',
+        'page_index': get_page_index(page)
+    }
+```
+模板页面首先通过API：`GET /api/blogs?page=?`拿到Model：
+```Python
+{
+    "page": {
+        "has_next": true,
+        "page_index": 1,
+        "page_count": 2,
+        "has_previous": false,
+        "item_count": 12
+    },
+    "blogs": [...]
+}
+```
+然后，通过Vue初始化MVVM：
+```Python
+<script>
+function initVM(data) {
+    var vm = new Vue({
+        el: '#vm',
+        data: {
+            blogs: data.blogs,
+            page: data.page
+        },
+        methods: {
+            edit_blog: function (blog) {
+                location.assign('/manage/blogs/edit?id=' + blog.id);
+            },
+            delete_blog: function (blog) {
+                if (confirm('确认要删除“' + blog.name + '”？删除后不可恢复！')) {
+                    postJSON('/api/blogs/' + blog.id + '/delete', function (err, r) {
+                        if (err) {
+                            return alert(err.message || err.error || err);
+                        }
+                        refresh();
+                    });
+                }
+            }
+        }
+    });
+    $('#vm').show();
+}
+$(function() {
+    getJSON('/api/blogs', {
+        page: {{ page_index }}
+    }, function (err, results) {
+        if (err) {
+            return fatal(err);
+        }
+        $('#loading').hide();
+        initVM(results);
+    });
+});
+</script>
+```
+View的容器是`#vm`，包含一个table，我们用`v-repeat`可以把Model的数组`blogs`直接变成多行的`<tr>`：
+```Python
+<div id="vm" class="uk-width-1-1">
+    <a href="/manage/blogs/create" class="uk-button uk-button-primary"><i class="uk-icon-plus"></i> 新日志</a>
+
+    <table class="uk-table uk-table-hover">
+        <thead>
+            <tr>
+                <th class="uk-width-5-10">标题 / 摘要</th>
+                <th class="uk-width-2-10">作者</th>
+                <th class="uk-width-2-10">创建时间</th>
+                <th class="uk-width-1-10">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr v-repeat="blog: blogs" >
+                <td>
+                    <a target="_blank" v-attr="href: '/blog/'+blog.id" v-text="blog.name"></a>
+                </td>
+                <td>
+                    <a target="_blank" v-attr="href: '/user/'+blog.user_id" v-text="blog.user_name"></a>
+                </td>
+                <td>
+                    <span v-text="blog.created_at.toDateTime()"></span>
+                </td>
+                <td>
+                    <a href="#0" v-on="click: edit_blog(blog)"><i class="uk-icon-edit"></i>
+                    <a href="#0" v-on="click: delete_blog(blog)"><i class="uk-icon-trash-o"></i>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div v-component="pagination" v-with="page"></div>
+</div>
+```
+往Model的`blogs`数组中增加一个Blog元素，table就神奇地增加了一行；把`blogs`数组的某个元素删除，table就神奇地减少了一行。所有复杂的Model-View的映射逻辑全部由MVVM框架完成，我们只需要在HTML中写上`v-repeat`指令，就什么都不用管了。
+
+可以把`v-repeat="blog: blogs"`看成循环代码，所以，可以在一个`<tr>`内部引用循环变量`blog`。`v-text`和`v-attr`指令分别用于生成文本和DOM节点属性。
+
+-------
+RequestHandler
+
+RequestHandler定义的是类，但本质上是一个函数，`index`函数里是包含了一个`request`参数的，但我们新定义的很多函数中，`request`参数都是可以被省略掉的，那是因为新定义的函数最终都是被`RequestHandler`处理，自动加上一个`request`参数，从而符合`app.router.add_route`第三个参数的要求，所以说`RequestHandler`起到统一标准化接口的作用。
+
+接口是统一了，但每个函数要求的参数都是不一样的，那又要如何解决呢？得益于 **factory** 的理念，我们很容易找一种解决方案，就如同`response_factory`一样把任何类型的返回值最后都统一封装成一个`web.Response`对象。`RequestHandler`也可以把任何参数都变成`self._func(**kw)`的形式。那问题来了，那kw的参数到底要去哪里去获取呢？
+1. `request.match_info`的参数： `match_info`主要是保存`@get('/blog/{id}')`里面的`id`，就是路由路径里的参数
+2. `GET`的参数： 例如`/?page=2`
+3. `POST`的参数： `api`的`json`或者是网页中`form`
+4. `request`参数： 有时需要验证用户信息就需要获取`request`里面的数据
+
+`RequestHandler`的主要作用就是构成标准的`app.router.add_route`第三个参数，还有就是获取不同的函数的对应的参数，就这两个主要作用。
+
+[讨论](https://www.liaoxuefeng.com/discuss/001409195742008d822b26cf3de46aea14f2b7378a1ba91000/001462893855750f848630bb19c43c582fdff90f58cbee0000)
+
+[示例代码](https://github.com/moling3650/mblog/blob/master/www/app/frame/__init__.py)
+
+**写代码要实事求是，不要模棱两可。拿不准的地方就卯上劲闹明白，这里也拿不准，那里也拿不准，后边就很难掌握这个项目了。**
+
+[链接](https://www.liaoxuefeng.com/discuss/001409195742008d822b26cf3de46aea14f2b7378a1ba91000/001462893855750f848630bb19c43c582fdff90f58cbee0000?page=2)
+
+**问题解决了**
+```Python
+def check_admin(request):
+    #if request.__user__ is None or not request.__user__.admin:
+    if request.__user__ is None:
+        raise APIPermissionError()
+```
+原因是登录的账户名不是admin管理员账户，后续再针对细节研究一下
+
+更改如下，进入mysql然后将自己用户名的admin权限改为1
+```Python
+select * from users;
+update users set admin = 1;
+select * from users;
+```
+此时所有用户都有管理员权限了，另外新建的用户都没有管理员权限，然后此时就不会出现permission denied了，新建的用户仍会出现这个权限问题。这时候需要重新启动一下Python，才能生效。
+
+## Day 13 - 提升开发效率
+------
+现在，我们已经把一个Web App的框架完全搭建好了，从后端的API到前端的MVVM，流程已经跑通了。
+
+在继续工作前，注意到每次修改Python代码，都必须在命令行先Ctrl-C停止服务器，再重启，改动才能生效。
+
+在开发阶段，每天都要修改、保存几十次代码，每次保存都手动来这么一下非常麻烦，严重地降低了我们的开发效率。有没有办法让服务器检测到代码修改后自动重新加载呢？
+
+Django的开发环境在Debug模式下就可以做到自动重新加载，如果我们编写的服务器也能实现这个功能，就能大大提升开发效率。
+
+可惜的是，Django没把这个功能独立出来，不用Django就享受不到，怎么办？
+
+其实Python本身提供了重新载入模块的功能，但不是所有模块都能被重新载入。另一种思路是检测`www`目录下的代码改动，一旦有改动，就自动重启服务器。
+
+按照这个思路，我们可以编写一个辅助程序`pymonitor.py`，让它启动`wsgiapp.py`，并时刻监控`www`目录下的代码改动，有改动时，先把当前`wsgiapp.py`进程杀掉，再重启，就完成了服务器进程的自动重启。
+
+要监控目录文件的变化，我们也无需自己手动定时扫描，Python的第三方库`watchdog`可以利用操作系统的API来监控目录文件的变化，并发送通知。我们先用`pip`安装：
+```Python
+$ pip3 install watchdog
+```
+利用`watchdog`接收文件变化的通知，如果是`.py`文件，就自动重启`wsgiapp.py`进程。
+
+利用Python自带的`subprocess`实现进程的启动和终止，并把输入输出重定向到当前进程的输入输出中：
+```Python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+__author__ = 'Michael Liao'
+
+import os, sys, time, subprocess
+
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+def log(s):
+    print('[Monitor] %s' % s)
+
+class MyFileSystemEventHander(FileSystemEventHandler):
+
+    def __init__(self, fn):
+        super(MyFileSystemEventHander, self).__init__()
+        self.restart = fn
+
+    def on_any_event(self, event):
+        if event.src_path.endswith('.py'):
+            log('Python source file changed: %s' % event.src_path)
+            self.restart()
+
+command = ['echo', 'ok']
+process = None
+
+def kill_process():
+    global process
+    if process:
+        log('Kill process [%s]...' % process.pid)
+        process.kill()
+        process.wait()
+        log('Process ended with code %s.' % process.returncode)
+        process = None
+
+def start_process():
+    global process, command
+    log('Start process %s...' % ' '.join(command))
+    process = subprocess.Popen(command, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+
+def restart_process():
+    kill_process()
+    start_process()
+
+def start_watch(path, callback):
+    observer = Observer()
+    observer.schedule(MyFileSystemEventHander(restart_process), path, recursive=True)
+    observer.start()
+    log('Watching directory %s...' % path)
+    start_process()
+    try:
+        while True:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
+
+if __name__ == '__main__':
+    argv = sys.argv[1:]
+    if not argv:
+        print('Usage: ./pymonitor your-script.py')
+        exit(0)
+    if argv[0] != 'python3':
+        argv.insert(0, 'python3')
+    command = argv
+    path = os.path.abspath('.')
+    start_watch(path, None)
+```
+一共70行左右的代码，就实现了Debug模式的自动重新加载。用下面的命令启动服务器：
+```Python
+$ python3 pymonitor.py wsgiapp.py
+```
+或者给`pymonitor.py`加上可执行权限，启动服务器：
+```Python
+$ ./pymonitor.py app.py
+```
+在编辑器中打开一个`.py`文件，修改后保存，看看命令行输出，是不是自动重启了服务器：
+```Python
+$ ./pymonitor.py app.py 
+[Monitor] Watching directory /Users/michael/Github/awesome-python3-webapp/www...
+[Monitor] Start process python app.py...
+...
+INFO:root:application (/Users/michael/Github/awesome-python3-webapp/www) will start at 0.0.0.0:9000...
+[Monitor] Python source file changed: /Users/michael/Github/awesome-python-webapp/www/handlers.py
+[Monitor] Kill process [2747]...
+[Monitor] Process ended with code -9.
+[Monitor] Start process python app.py...
+...
+INFO:root:application (/Users/michael/Github/awesome-python3-webapp/www) will start at 0.0.0.0:9000...
+```
+现在，只要一保存代码，就可以刷新浏览器看到效果，大大提升了开发效率。
+------
+错误
+```Python
+F:\Python\awesome_py3_webapp\www>python pymonitor.py app.py
+[Monitor] Watching directory F:\Python\awesome_py3_webapp\www...
+[Monitor] Start process python3 app.py...
+Traceback (most recent call last):
+  File "pymonitor.py", line 68, in <module>
+    start_watch(path, None)
+  File "pymonitor.py", line 51, in start_watch
+    start_process()
+  File "pymonitor.py", line 40, in start_process
+    process = subprocess.Popen(command, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+  File "D:\Software\Anaconda3\lib\subprocess.py", line 709, in __init__
+    restore_signals, start_new_session)
+  File "D:\Software\Anaconda3\lib\subprocess.py", line 997, in _execute_child
+    startupinfo)
+FileNotFoundError: [WinError 2] 系统找不到指定的文件。
+```
+修改路径和指令之后的错误
+```Python
+F:\Python\awesome_py3_webapp\www>python pymonitor.py app.py
+[Monitor] Watching directory F:\Python\awesome_py3_webapp\www...
+[Monitor] Start process python3 app.py...
+Traceback (most recent call last):
+  File "pymonitor.py", line 68, in <module>
+    start_watch(path, None)
+  File "pymonitor.py", line 51, in start_watch
+    start_process()
+  File "pymonitor.py", line 40, in start_process
+    process = subprocess.Popen(command, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+  File "D:\Software\Anaconda3\lib\subprocess.py", line 709, in __init__
+    restore_signals, start_new_session)
+  File "D:\Software\Anaconda3\lib\subprocess.py", line 997, in _execute_child
+    startupinfo)
+FileNotFoundError: [WinError 2] 系统找不到指定的文件。
+
+F:\Python\awesome_py3_webapp\www>python pymonitor.py app.py
+F:\Python\awesome_py3_webapp\www\pymonitor.py
+[Monitor] Watching directory F:\Python\awesome_py3_webapp\www\pymonitor.py...
+[Monitor] Start process python app.py...
+Exception in thread Thread-2:
+Traceback (most recent call last):
+  File "D:\Software\Anaconda3\lib\threading.py", line 916, in _bootstrap_inner
+    self.run()
+  File "D:\Software\Anaconda3\lib\site-packages\watchdog\observers\api.py", line 146, in run
+    self.queue_events(self.timeout)
+  File "D:\Software\Anaconda3\lib\site-packages\watchdog\observers\read_directory_changes.py", line 75, in queue_events
+    winapi_events = read_events(self._handle, self.watch.is_recursive)
+  File "D:\Software\Anaconda3\lib\site-packages\watchdog\observers\winapi.py", line 346, in read_events
+    buf, nbytes = read_directory_changes(handle, recursive)
+  File "D:\Software\Anaconda3\lib\site-packages\watchdog\observers\winapi.py", line 306, in read_directory_changes
+    raise e
+  File "D:\Software\Anaconda3\lib\site-packages\watchdog\observers\winapi.py", line 302, in read_directory_changes
+    ctypes.byref(nbytes), None, None)
+  File "D:\Software\Anaconda3\lib\site-packages\watchdog\observers\winapi.py", line 107, in _errcheck_bool
+    raise ctypes.WinError()
+OSError: [WinError 87] 参数错误。
+```
+修改如下
+```Python
+if __name__ == '__main__':
+    argv = sys.argv[1:]
+    if not argv:
+        print('Usage: python pymonitor.py app.py')
+        exit(0)
+    if argv[0] != 'python':
+        argv.insert(0, 'python')
+    command = argvdir  
+    path = os.path.dirname(os.path.abspath(__file__))
+    print(path)
+    start_watch(path, None)
+```
+此时输入命令
+```Python
+python pymonitor.py app.py
+```
+得到正确监听管理结果
+```Python
+PS F:\Python\awesome_py3_webapp\www> python pymonitor.py app.py
+F:\Python\awesome_py3_webapp\www
+[Monitor] Watching directory F:\Python\awesome_py3_webapp\www...
+[Monitor] Start process python app.py...
+INFO:root:Found model: User (table: users)
+...
+INFO:root:server started at http://127.0.0.1:9000...
+[Monitor] Python source file changed: F:\Python\awesome_py3_webapp\www\models.py
+[Monitor] Kill process [11604]...
+[Monitor] Process ended with code 1.
+[Monitor] Start process python app.py...
+[Monitor] Python source file changed: F:\Python\awesome_py3_webapp\www\models.py
+[Monitor] Kill process [10364]...
+[Monitor] Process ended with code 1.
+[Monitor] Start process python app.py...
+INFO:root:Found model: User (table: users)
+...
+INFO:root:server started at http://127.0.0.1:9000...
+[Monitor] Python source file changed: F:\Python\awesome_py3_webapp\www\models.py
+[Monitor] Kill process [7788]...
+[Monitor] Process ended with code 1.
+[Monitor] Start process python app.py...
+[Monitor] Python source file changed: F:\Python\awesome_py3_webapp\www\models.py
+[Monitor] Kill process [3620]...
+[Monitor] Process ended with code 1.
+[Monitor] Start process python app.py...
+INFO:root:Found model: User (table: users)
+...
+INFO:root:server started at http://127.0.0.1:9000...
 ```
