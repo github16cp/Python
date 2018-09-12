@@ -66,7 +66,7 @@ Lisa,87
 也就是Grade表的每一行对应Class表的多行，在关系数据库中，这种基于表（Table）的一对多的关系就是关系数据库的基础。
 
 根据某个年级的ID就可以查找所有班级的行，这种查询语句在关系数据库中称为SQL语句，可以写成：
-```Python
+```sql
 SELECT * FROM classes WHERE grade_id = '1';
 ```
 结果也是一个表：
@@ -231,7 +231,7 @@ character-set-server = utf8
 collation-server = utf8_general_ci
 ```
 重启MySQL后，可以通过MySQL的客户端命令行检查编码：
-```Python
+```sql
 $ mysql -u root -p
 Enter password: 
 Welcome to the MySQL monitor...
@@ -258,15 +258,15 @@ mysql> show variables like '%char%';
 
 ### 安装MySQL驱动
 由于MySQL服务器以独立的进程运行，并通过网络对外服务，所以，需要支持Python的MySQL驱动来连接到MySQL服务器。MySQL官方提供了mysql-connector-python驱动，但是安装的时候需要给pip命令加上参数`--allow-external`：
-```Python
+```
 $ pip install mysql-connector-python --allow-external mysql-connector-python
 ```
 如果上面的命令安装失败，可以试试另一个驱动：
-```Python
+```
 $ pip install mysql-connector
 ```
 在Anaconda中输入以上命令
-```Python
+```
 Collecting mysql-connector
   Downloading https://files.pythonhosted.org/packages/59/e0/775bf5fb3dd4c7f9aa6877907d4a96eecca6886c603dedfea6e843e94560/mysql-connector-2.1.6.tar.gz (11.8MB)
     100% |████████████████████████████████| 11.8MB 2.3MB/s
@@ -342,7 +342,7 @@ class User(object):
 在Python中，最有名的ORM框架是SQLAlchemy。我们来看看SQLAlchemy的用法。
 
 首先通过pip安装SQLAlchemy：
-```Python
+```
 $ pip install sqlalchemy
 ```
 然后，利用上次我们在MySQL的test数据库中创建的`user`表，用SQLAlchemy来试试：

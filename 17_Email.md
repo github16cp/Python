@@ -116,7 +116,7 @@ msg['To']接收的是字符串而不是list，如果有多个邮件地址，用,
 再发送一遍邮件，就可以在收件人邮箱中看到正确的标题、发件人和收件人：
 
 如果我们查看Email的原始内容，可以看到如下经过编码的邮件头：
-```Python
+```
 From: =?utf-8?b?UHl0aG9u54ix5aW96ICF?= <xxxxxx@163.com>
 To: =?utf-8?b?566h55CG5ZGY?= <xxxxxx@qq.com>
 Subject: =?utf-8?b?5p2l6IeqU01UUOeahOmXruWAmeKApuKApg==?=

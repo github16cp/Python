@@ -448,7 +448,7 @@ print(10 / n)
   4     print(10 / n)
 ```
 输入命令`n`可以单步执行代码：
-```Python
+```
 (Pdb) n
 > /Users/michael/Github/learn-python3/samples/debug/err.py(3)<module>()
 -> n = int(s)
@@ -482,7 +482,7 @@ pdb.set_trace() # 运行到这里会自动暂停
 print(10 / n)
 ```
 运行代码，程序会自动在`pdb.set_trace()`暂停并进入pdb调试环境，可以用命令`p`查看变量，或者用命令`c`继续运行：
-```Python
+```
 >>> python err.py 
 > /Users/michael/Github/learn-python3/samples/debug/err.py(7)<module>()
 -> print(10 / n)
@@ -625,7 +625,7 @@ if __name__ == '__main__':
 >>> python mydict_test.py
 ```
 另一种方法是在命令行通过参数`-m unittest`直接运行单元测试：
-```Python
+```
 >>> python -m unittest mydict_test
 .....
 ----------------------------------------------------------------------

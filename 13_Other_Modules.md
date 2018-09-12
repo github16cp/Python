@@ -174,7 +174,7 @@ requests对Cookie做了特殊处理，使得我们不必解析Cookie就可以轻
 检测编码
 ### 安装chardet
 如果安装了Anaconda，chardet就已经可用了。否则，需要在命令行下通过pip安装：
-```Python
+```
 $ pip install chardet
 ```
 如果遇到Permission denied安装失败，请加上sudo重试。
@@ -295,7 +295,7 @@ Traceback (most recent call last):
 psutil.AccessDenied: psutil.AccessDenied (pid=3847)
 ```
 你可能会得到一个`AccessDenied`错误，原因是psutil获取信息也是要走系统接口，而获取网络连接信息需要root权限，这种情况下，可以退出Python交互环境，用`sudo`重新启动：
-```Python
+```
 $ sudo python3
 Password: ******
 Python 3.6.3 ... on darwin
@@ -362,7 +362,7 @@ Terminated: 15 <-- 自己把自己结束了
 和获取网络连接类似，获取一个root用户的进程需要root权限，启动Python交互环境或者`.py`文件时，需要`sudo`权限。
 
 psutil还提供了一个`test()`函数，可以模拟出`ps`命令的效果：
-```Python
+```
 $ sudo python3
 Password: ******
 Python 3.6.3 ... on darwin

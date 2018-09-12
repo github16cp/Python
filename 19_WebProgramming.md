@@ -146,7 +146,7 @@ HTTP响应如果包含body，也是通过`\r\n\r\n`来分隔的。请再次注�
 HTML长什么样？上次我们看了新浪首页的HTML源码，如果仔细数数，竟然有6000多行！
 
 所以，学HTML，就不要指望从新浪入手了。我们来看看最简单的HTML长什么样：
-```Python
+```html
 <html>
 <head>
   <title>Hello</title>
@@ -162,7 +162,7 @@ HTML文档就是一系列的Tag组成，最外层的Tag是`<html>`。规范的HT
 
 ### CSS简介
 CSS是Cascading Style Sheets（层叠样式表）的简称，CSS用来控制HTML里的所有元素如何展现，比如，给标题元素`<h1>`加一个样式，变成48号字体，灰色，带阴影：
-```Python
+```css
 <html>
 <head>
   <title>Hello</title>
@@ -181,7 +181,7 @@ CSS是Cascading Style Sheets（层叠样式表）的简称，CSS用来控制HTML
 ```
 ###　JavaScript简介
 JavaScript虽然名称有个Java，但它和Java真的一点关系没有。JavaScript是为了让HTML具有交互性而作为脚本语言添加的，JavaScript既可以内嵌到HTML中，也可以从外部链接到HTML中。如果我们希望当用户点击标题时把标题变成红色，就必须通过JavaScript来实现：
-```Python
+```html
 <html>
 <head>
   <title>Hello</title>
@@ -288,7 +288,7 @@ httpd.serve_forever()
 启动成功后，打开浏览器，输入`http://localhost:8000/`，就可以看到结果了：
 
 在命令行可以看到wsgiref打印的log信息：
-```Python
+```
 Serving HTTP on port 8000...
 127.0.0.1 - - [03/Sep/2018 08:51:07] "GET / HTTP/1.1" 200 20
 127.0.0.1 - - [03/Sep/2018 08:51:07] "GET /favicon.ico HTTP/1.1" 200 20
@@ -337,7 +337,7 @@ def application(environ, start_response):
 
 用Flask编写Web App比WSGI接口简单（这不是废话么，要是比WSGI还复杂，用框架干嘛？），我们先用pip安装Flask：
 
-```Python
+```
 $ pip install flask
 ```
 然后写一个`app.py`，处理3个URL，分别是：
@@ -412,7 +412,7 @@ Web框架把我们从WSGI中拯救出来了。现在，我们只需要不断地�
 
 使用模板，我们需要预先准备一个HTML文档，这个HTML文档不是普通的HTML，而是嵌入了一些变量和指令，然后，根据我们传入的数据，替换后，得到最终的HTML，发送给用户：
 1. 浏览器请求
-```Python
+```
    GET /Michael -> name = 'Michael'
 ```
 2. `app.py`
@@ -483,7 +483,7 @@ if __name__ == '__main__':
     app.run()
 ```
 Flask通过`render_template()`函数来实现模板的渲染。和Web框架类似，Python的模板也有很多种。Flask默认支持的模板是jinja2，所以我们先直接安装jinja2：
-```Python
+```
 $ pip install jinja2
 ```
 然后，开始编写jinja2模板：
@@ -561,11 +561,3 @@ $ pip install jinja2
 
 ### 小结
 有了MVC，我们就分离了Python代码和HTML代码。HTML代码全部放到模板里，写起来更有效率。
-```Python
-
-```
-
-
-```Python
-
-```

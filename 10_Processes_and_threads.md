@@ -170,7 +170,7 @@ r = subprocess.call(['nslookup', 'www.python.org'])
 print('Exit code:', r)
 ```
 运行结果：
-```Python
+```
 $ nslookup www.python.org
 Server:        192.168.19.4
 Address:    192.168.19.4#53
@@ -199,7 +199,7 @@ python.org
 exit
 ```
 运行结果如下：
-```Python
+```
 $ nslookup
 Server:        192.168.19.4
 Address:    192.168.19.4#53
@@ -686,7 +686,7 @@ print('worker exit.')
 任务进程要通过网络连接到服务进程，所以要指定服务进程的IP。
 
 现在，可以试试分布式进程的工作效果了。先启动`task_master.py`服务进程：
-```Python
+```
 $ python3 task_master.py 
 Put task 3411...
 Put task 1605...
@@ -701,7 +701,7 @@ Put task 7866...
 Try get results...
 ```
 `task_master.py`进程发送完任务后，开始等待`result`队列的结果。现在启动`task_worker.py`进程：
-```Python
+```
 $ python3 task_worker.py
 Connect to server 127.0.0.1...
 run task 3411 * 3411...

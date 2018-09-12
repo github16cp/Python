@@ -723,7 +723,7 @@ Generator return value: done
 
 练习
 杨辉三角定义如下：
-
+```
           1
          / \
         1   1
@@ -735,6 +735,7 @@ Generator return value: done
   1   4   6   4   1
  / \ / \ / \ / \ / \
 1   5   10  10  5   1
+```
 把每一行看做一个list，试写一个generator，不断输出下一行的list：
 
 # -*- coding: utf-8 -*-

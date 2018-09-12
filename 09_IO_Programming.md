@@ -241,7 +241,7 @@ environ({'VERSIONER_PYTHON_PREFER_32_BIT': 'no', 'TERM_PROGRAM_VERSION': '326', 
 part-1/part-2
 ```
 而Windows下会返回这样的字符串：
-```Python
+```
 part-1\part-2
 ```
 同样的道理，要拆分路径时，也不要直接去拆字符串，而要通过`os.path.split()`函数，这样可以把一个路径拆分为两部分，后一部分总是最后级别的目录或文件名：
